@@ -5,7 +5,7 @@ on:
     branches: [ "main" ]   # chạy khi bạn push lên nhánh main
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:

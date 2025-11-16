@@ -1,61 +1,28 @@
-name: Deploy Spring Boot to EC2
+name: Deploy to EC2
 
 on:
   push:
-    branches: [ "main" ]   # chạy khi bạn push lên nhánh main
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout source code
-        uses: actions/checkout@v3
+      - name: Setup SSH Key
+        run: |
+          echo "${{ secrets.EC2_KEY }}" > shop1.pem
+          chmod 600 shop1.pem
 
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      - name: Build JAR
-        run: mvn clean package -DskipTests
-
-      - name: Copy JAR to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_KEY }}
-          source: "target/*.jar"
-          target: "/home/ubuntu/app/"
-
-      - name: Restart Application on EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-            host: ${{ secrets.EC2_HOST }}
-            username: ubuntu
-            key: ${{ secrets.EC2_KEY }}
-            port: 22
-            timeout: 30s
-            command_timeout: 10m
-            script: |
-              APP_DIR="/home/ubuntu/app"
-              
-              echo "Stopping old app (if exists)..."
-              # Chỉ kill app java trong thư mục app
-              pkill -f "$APP_DIR" || true
-              
-              echo "Finding latest .jar file..."
-              # Lấy file .jar mới nhất trong thư mục
-              LATEST_JAR=$(ls -t $APP_DIR/*.jar | head -n 1)
-              echo "Latest JAR: $LATEST_JAR"
-              
-              echo "Starting new app..."
-              cd $APP_DIR
-              nohup java -jar "$LATEST_JAR" > log.txt 2>&1 &
-              
-              echo "Deployment complete."
-              sleep 3
-              echo "Check app status:"
-              ps aux | grep java | grep "$APP_DIR"
+      - name: Deploy via SSH
+        run: |
+          ssh -o StrictHostKeyChecking=no -i key.pem ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/app
+            git remote set-url origin git@github.com:duognguyn-code/myshop.git
+            git pull origin main
+            docker-compose down
+            docker-compose build --no-cache
+            docker-compose up -d
+          EOF

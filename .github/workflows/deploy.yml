@@ -33,15 +33,29 @@ jobs:
       - name: Restart Application on EC2
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            echo "Stopping old app (if exists)..."
-            pkill -f "java -jar" || true
-            
-            echo "Starting new app..."
-            cd /home/ubuntu/app
-            nohup java -jar $(ls *.jar | head -n 1) > log.txt 2>&1 &
-            
-            echo "Deployment complete."
+            host: ${{ secrets.EC2_HOST }}
+            username: ubuntu
+            key: ${{ secrets.EC2_KEY }}
+            port: 22
+            timeout: 30s
+            command_timeout: 10m
+            script: |
+              APP_DIR="/home/ubuntu/app"
+              
+              echo "Stopping old app (if exists)..."
+              # Chỉ kill app java trong thư mục app
+              pkill -f "$APP_DIR" || true
+              
+              echo "Finding latest .jar file..."
+              # Lấy file .jar mới nhất trong thư mục
+              LATEST_JAR=$(ls -t $APP_DIR/*.jar | head -n 1)
+              echo "Latest JAR: $LATEST_JAR"
+              
+              echo "Starting new app..."
+              cd $APP_DIR
+              nohup java -jar "$LATEST_JAR" > log.txt 2>&1 &
+              
+              echo "Deployment complete."
+              sleep 3
+              echo "Check app status:"
+              ps aux | grep java | grep "$APP_DIR"

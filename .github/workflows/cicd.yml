@@ -2,7 +2,7 @@ name: Deploy Spring Boot to EC2
 
 on:
   push:
-    branches: [ "main" ]   # chạy khi bạn push lên nhánh main
+    branches: [ "main" ]
 
 jobs:
   build:
@@ -23,18 +23,22 @@ jobs:
 
       - name: Login to docker hub
         run: docker login -u ${{secrets.DOCKER_USERNAME}} -p ${{secrets.DOCKER_PASSWORD}}
+
       - name: Build docker image
         run: docker build -t integrationninjas/myshop .
+
       - name: Publish image to docker hub
         run: docker push integrationninjas/myshop:latest
 
-    deploy:
-      needs: build
-      runs-on: [aws-ec2]
-      steps:
-        - name: Pull Image from docker hub
-          run: docker push integrationninjas/myshop:latest
-        - name: Delete old container
-          run:  docker rm -f myshop-container
-        - name: Run docker container
-          run: docker run -d -p 8080:8080 --name myshop-container integrationninjas/myshop
+  deploy:
+    needs: build
+    runs-on: [aws-ec2]
+    steps:
+      - name: Pull Image from docker hub
+        run: docker pull integrationninjas/myshop:latest
+
+      - name: Delete old container
+        run: docker rm -f myshop-container || true
+
+      - name: Run docker container
+        run: docker run -d -p 8080:8080 --name myshop-container integrationninjas/myshop:latest

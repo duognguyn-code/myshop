@@ -1,44 +1,47 @@
 name: Deploy Spring Boot to EC2
 
-# Chạy workflow khi push lên nhánh main
 on:
   push:
-    branches:
-      - main
+    branches: [ "main" ]   # chạy khi bạn push lên nhánh main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout code từ repo
-      - name: Checkout code
+      - name: Checkout source code
         uses: actions/checkout@v3
 
-      # 2️⃣ Cấu hình SSH key từ Secret
-      - name: Setup SSH key
-        uses: webfactory/ssh-agent@v0.7.0
+      - name: Setup Java
+        uses: actions/setup-java@v3
         with:
-          ssh-private-key: ${{ secrets.EC2_SSH_KEY }}
+          java-version: '17'
+          distribution: 'temurin'
 
-      # 3️⃣ Test kết nối SSH tới EC2
-      - name: Test SSH connection
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} "echo 'SSH connection OK'"
+      - name: Build JAR
+        run: mvn clean package -DskipTests
 
-      # 4️⃣ Copy JAR tới EC2
       - name: Copy JAR to EC2
-        run: |
-          scp -o StrictHostKeyChecking=no target/myshop-0.0.1-SNAPSHOT.jar \
-          ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:${{ secrets.EC2_APP_DIR }}/
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          source: "target/*.jar"
+          target: "/home/ubuntu/app/"
 
-      # 5️⃣ SSH vào EC2 và restart Spring Boot app
-      - name: SSH and restart app
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-            # Dừng app cũ nếu đang chạy
-            pkill -f 'myshop-0.0.1-SNAPSHOT.jar' || true
-
-            # Chạy lại app trên background
-            nohup java -jar $EC2_APP_DIR/myshop-0.0.1-SNAPSHOT.jar > $EC2_APP_DIR/output.log 2>&1 &
-          EOF
+      - name: Restart Application on EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_KEY }}
+          script: |
+            echo "Stopping old app (if exists)..."
+            pkill -f "java -jar" || true
+            
+            echo "Starting new app..."
+            cd /home/ubuntu/app
+            nohup java -jar $(ls *.jar | head -n 1) > log.txt 2>&1 &
+            
+            echo "Deployment complete."

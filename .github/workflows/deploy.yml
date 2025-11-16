@@ -1,47 +1,46 @@
-name: Deploy Spring Boot to EC2
+name: Deploy to EC2
 
 on:
   push:
-    branches: [ "main" ]   # chạy khi bạn push lên nhánh main
+    branches: [ "main" ]
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
+    env:
+      DEPLOY_MYSHOP_DIR: /home/ubuntu/deploy-myshop
+      MY_SPRINGBOOT_DIR: /home/ubuntu/my-springboot
+
     steps:
-      - name: Checkout source code
+      - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Setup Java
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
 
-      - name: Build JAR
-        run: mvn clean package -DskipTests
+      - name: Deploy deploy-myshop
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+          "mkdir -p $DEPLOY_MYSHOP_DIR && \
+           cd $DEPLOY_MYSHOP_DIR && \
+           pkill -f 'java -jar' || true && \
+           if ls *.jar 1> /dev/null 2>&1; then \
+             nohup java -jar \$(ls *.jar | head -n 1) > deploy-myshop.log 2>&1 & \
+             echo 'deploy-myshop deployed.'; \
+           else echo 'No JAR found for deploy-myshop.'; fi"
 
-      - name: Copy JAR to EC2
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_KEY }}
-          source: "target/*.jar"
-          target: "/home/ubuntu/app/"
-
-      - name: Restart Application on EC2
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ubuntu
-          key: ${{ secrets.EC2_KEY }}
-          script: |
-            echo "Stopping old app (if exists)..."
-            pkill -f "java -jar" || true
-            
-            echo "Starting new app..."
-            cd /home/ubuntu/app
-            nohup java -jar $(ls *.jar | head -n 1) > log.txt 2>&1 &
-            
-            echo "Deployment complete."
+      - name: Deploy my-springboot
+        run: |
+          ssh -i ~/.ssh/id_ed25519 ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} \
+          "mkdir -p $MY_SPRINGBOOT_DIR && \
+           cd $MY_SPRINGBOOT_DIR && \
+           pkill -f 'java -jar' || true && \
+           if ls *.jar 1> /dev/null 2>&1; then \
+             nohup java -jar \$(ls *.jar | head -n 1) > my-springboot.log 2>&1 & \
+             echo 'my-springboot deployed.'; \
+           else echo 'No JAR found for my-springboot.'; fi"

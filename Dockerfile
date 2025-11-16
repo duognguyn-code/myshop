@@ -1,5 +1,5 @@
 # Sử dụng JDK làm base image
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk-alpine
 
 # Tạo thư mục chứa app
 WORKDIR /app
@@ -12,3 +12,6 @@ EXPOSE 8080
 
 # Lệnh chạy Spring Boot
 ENTRYPOINT ["java", "-jar", "app.jar"]
+
+# Build image
+
